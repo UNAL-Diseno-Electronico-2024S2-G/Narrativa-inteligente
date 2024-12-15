@@ -8,8 +8,8 @@ void init_wifi()
     WiFi.setSleep(false);
 
     while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+        delay(500);
+        Serial.print(".");
     }
     Serial.println("");
     Serial.println("WiFi connected");

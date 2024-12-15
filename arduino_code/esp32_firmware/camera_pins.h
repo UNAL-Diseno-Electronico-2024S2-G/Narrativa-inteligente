@@ -1,3 +1,6 @@
+#define BOARD_ESP32S3_WROOM
+
+#ifdef BOARD_ESP32S3_WROOM
 #define PWDN_GPIO_NUM    41
 #define RESET_GPIO_NUM   42
 #define XCLK_GPIO_NUM    15
@@ -15,3 +18,6 @@
 #define VSYNC_GPIO_NUM   6
 #define HREF_GPIO_NUM    7
 #define PCLK_GPIO_NUM    13
+#else
+  #error "Camera model not selected"
+#endif
