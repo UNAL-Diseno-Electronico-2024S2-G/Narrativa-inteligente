@@ -7,22 +7,27 @@
 #include <stdio.h>
 #include <FastLED.h>
 
-// Incluir librerías para la cámara y la tarjeta SD (asegúrate de que existan y funcionen en tu proyecto)
+// Incluir librerías para la cámara y la tarjeta SD
 #include "../camera_utils.h"    // Función init_camera() y demás
 #include "../sd_card_utils.h"   // Función init_sdcard() y demás
-#include <EEPROM.h>          // Opcional, para llevar el número de foto
+#include <EEPROM.h>             // Para llevar el número de foto
 
 // -------------------------
 // CONFIGURACIONES DEL AUDIO
 // -------------------------
 const char *ssid = "lab_control";         // Tu SSID
 const char *password = "lab_control";   // Tu contraseña
-#define SERVER_URL "http://192.168.1.111:8888/uploadAudio"  // Cambia la IP según la configuración de tu servidor
+#define SERVER_URL "http://192.168.1.111:8888/uploadAudio"  // Servidor de audio
 
+// -------------------------
+// CONFIGURACIÓN PARA ENVÍO DE FOTO
+// -------------------------
+#define PHOTO_SERVER_URL "http://192.168.1.111:8888/uploadPhoto"
+// La foto capturada se guardará con un nombre dinámico ("/pictureX.jpg")
 
 // Configuración de I2S  
 #define I2S_WS         45
-#define I2S_SD         47    // Nota: se ha reasignado para evitar conflicto con el LED
+#define I2S_SD         47    // Reasignado para evitar conflicto con el LED
 #define I2S_SCK        39
 #define I2S_PORT       I2S_NUM_0
 #define I2S_SAMPLE_RATE (16000)
@@ -50,7 +55,6 @@ volatile bool recordingInProgress = false;  // Evita grabaciones simultáneas
 // VARIABLES PARA LA FOTO
 // -------------------------
 #define EEPROM_SIZE 1
-// Si deseas persistir el número de foto, puedes usar EEPROM (opcional)
 int pictureNumber = 0;
 
 // -------------------------
@@ -64,7 +68,8 @@ void wavHeader(byte *header, int wavSize);
 void listFFAT(void);
 void wifiConnect(void *pvParameters);
 void uploadFile();
-void capturePhoto(); // Nueva función para capturar la foto
+void capturePhoto();      // Captura foto y la guarda en la SD
+void uploadPhoto(const char *photoPath);  // Envía la foto al servidor
 
 // -------------------------
 // SETUP Y LOOP
@@ -203,7 +208,7 @@ void i2s_adc(void *arg) {
   free(flash_write_buff);
   listFFAT();
 
-  // Una vez grabado, si ya se conectó al WiFi se procede a subir el archivo.
+  // Una vez grabado, si ya se conectó al WiFi se procede a subir el archivo de audio.
   if (isWIFIConnected) {
     uploadFile();
   }
@@ -335,7 +340,7 @@ void uploadFile() {
 
   ets_printf("===> Subiendo archivo al servidor\n");
   HTTPClient client;
-  client.begin(SERVER_URL); // Dirección del servidor
+  client.begin(SERVER_URL); // Servidor de audio
   client.addHeader("Content-Type", "audio/wav");
   int httpResponseCode = client.sendRequest("POST", &file, file.size());
   ets_printf("httpResponseCode: %d\n", httpResponseCode);
@@ -346,9 +351,9 @@ void uploadFile() {
     ets_printf("%s\n", response.c_str());
     ets_printf("====================      Fin      ====================\n");
 
-    // Si la transcripción contiene "capturar foto", se invoca la función para capturarla
+    // Si la transcripción contiene "capturar foto", se invoca la función para capturar y enviar la foto
     if (response.indexOf("capturar foto") >= 0) {
-      ets_printf("Transcripción indica 'capturar foto'. Iniciando captura...\n");
+      ets_printf("Transcripción indica 'capturar foto'. Iniciando captura y envío de foto...\n");
       capturePhoto();
     }
   } else {
@@ -359,11 +364,11 @@ void uploadFile() {
 }
 
 // -------------------------
-// FUNCIÓN PARA CAPTURAR FOTO
+// FUNCIÓN PARA CAPTURAR FOTO Y ENVIARLA
 // -------------------------
 void capturePhoto() {
-  // Inicializar cámara y SD (asegúrate de que estas funciones estén implementadas en tus utilidades)
   ets_printf("CAPTURA INICIADA\n");
+  // Inicializar cámara y SD (asegúrate de que init_camera() e init_sdcard() estén implementadas)
   init_camera();
   init_sdcard();
 
@@ -374,11 +379,12 @@ void capturePhoto() {
     return;
   }
 
-  // Opcional: usar EEPROM para llevar la cuenta de las fotos guardadas
+  // Usar EEPROM para llevar la cuenta de las fotos guardadas
   EEPROM.begin(EEPROM_SIZE);
   pictureNumber = EEPROM.read(0);
   pictureNumber++;
   
+  // Construir la ruta usando el número de foto (ej.: "/picture1.jpg", "/picture2.jpg", etc.)
   String path = "/picture" + String(pictureNumber) + ".jpg";
   fs::FS &fs = SD_MMC;
   ets_printf("Guardando foto en: %s\n", path.c_str());
@@ -394,4 +400,77 @@ void capturePhoto() {
   }
   filePhoto.close();
   esp_camera_fb_return(fb);
+
+  // Enviar la foto capturada al servidor
+  uploadPhoto(path.c_str());
+}
+
+// -------------------------
+// FUNCIÓN PARA ENVIAR FOTO AL SERVIDOR
+// -------------------------
+void uploadPhoto(const char *photoPath) {
+  if (WiFi.status() != WL_CONNECTED) {
+    ets_printf("⚠️ Error: WiFi no conectado.\n");
+    return;
+  }
+  
+  // Abrir la foto y leerla en memoria
+  File photoFile = SD_MMC.open(photoPath);
+  if (!photoFile) {
+    ets_printf("⚠️ No se pudo abrir la foto.\n");
+    return;
+  }
+  size_t fileSize = photoFile.size();
+  uint8_t* fileBuffer = (uint8_t*)malloc(fileSize);
+  if (!fileBuffer) {
+    ets_printf("⚠️ Error: No se pudo asignar memoria para la foto.\n");
+    photoFile.close();
+    return;
+  }
+  photoFile.read(fileBuffer, fileSize);
+  photoFile.close();
+
+  // Construir el cuerpo del POST en formato multipart/form-data
+  String boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"; // Puede ser cualquier cadena única
+  String multipartHeader = "--" + boundary + "\r\n" +
+                           "Content-Disposition: form-data; name=\"file\"; filename=\"photo.jpg\"\r\n" +
+                           "Content-Type: image/jpeg\r\n\r\n";
+  String multipartFooter = "\r\n--" + boundary + "--\r\n";
+
+  int headerLen = multipartHeader.length();
+  int footerLen = multipartFooter.length();
+  int totalLen = headerLen + fileSize + footerLen;
+
+  uint8_t* postBuffer = (uint8_t*)malloc(totalLen);
+  if (!postBuffer) {
+    ets_printf("⚠️ Error: No se pudo asignar memoria para el buffer del POST.\n");
+    free(fileBuffer);
+    return;
+  }
+
+  // Copiar el header, luego la foto y finalmente el footer
+  memcpy(postBuffer, multipartHeader.c_str(), headerLen);
+  memcpy(postBuffer + headerLen, fileBuffer, fileSize);
+  memcpy(postBuffer + headerLen + fileSize, multipartFooter.c_str(), footerLen);
+
+  free(fileBuffer);
+
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, PHOTO_SERVER_URL);
+
+  String contentType = "multipart/form-data; boundary=" + boundary;
+  http.addHeader("Content-Type", contentType);
+
+  int httpResponseCode = http.POST(postBuffer, totalLen);
+  free(postBuffer);
+
+  if (httpResponseCode > 0) {
+    ets_printf("✅ Foto subida, código: %d\n", httpResponseCode);
+    String response = http.getString();
+    ets_printf("📩 Respuesta del servidor: %s\n", response.c_str());
+  } else {
+    ets_printf("⚠️ Error en la subida: %d\n", httpResponseCode);
+  }
+  http.end();
 }
