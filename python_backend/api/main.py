@@ -32,7 +32,7 @@ def text_to_voice(text, fout="output.mp3"):
     tts = gTTS(text=text, lang='es')
     tts.save(fout)
 
-image_path = "/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/api/images/museos-mas-importantes-del-mundo.jpg"  # Update with your local image path
+image_path = "/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/api/images/picture78.jpg"
 image_data = get_b64_image(image_path)
 
 llm = ChatOpenAI(model='llava', base_url="http://localhost:11434/v1", api_key="ollama")

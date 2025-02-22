@@ -17,7 +17,7 @@
 // -------------------------
 const char *ssid = "lab_control";         // Tu SSID
 const char *password = "lab_control";   // Tu contraseña
-#define SERVER_URL "http://192.168.1.107:8888/uploadAudio"  // Cambia la IP según la configuración de tu servidor
+#define SERVER_URL "http://192.168.1.111:8888/uploadAudio"  // Cambia la IP según la configuración de tu servidor
 
 
 // Configuración de I2S  

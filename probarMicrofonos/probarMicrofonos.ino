@@ -8,7 +8,7 @@
 // either wire your microphone to the same pins or change these to match your wiring
 #define I2S_MIC_SERIAL_CLOCK GPIO_NUM_39
 #define I2S_MIC_LEFT_RIGHT_CLOCK GPIO_NUM_45
-#define I2S_MIC_SERIAL_DATA GPIO_NUM_48
+#define I2S_MIC_SERIAL_DATA GPIO_NUM_47
 
 // don't mess around with this
 i2s_config_t i2s_config = {
