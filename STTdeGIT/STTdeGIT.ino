@@ -7,55 +7,40 @@
 #include <stdio.h>
 #include <FastLED.h>
 
-// Incluir librerías para la cámara y la tarjeta SD (asegúrate de que existan y funcionen en tu proyecto)
-#include "../camera_utils.h"    // Función init_camera() y demás
-#include "../sd_card_utils.h"   // Función init_sdcard() y demás
-#include <EEPROM.h>          // Opcional, para llevar el número de foto
-
-// -------------------------
-// CONFIGURACIONES DEL AUDIO
-// -------------------------
-const char *ssid = "lab_control";         // Tu SSID
-const char *password = "lab_control";   // Tu contraseña
-#define SERVER_URL "http://192.168.1.107:8888/uploadAudio"  // Cambia la IP según la configuración de tu servidor
-
+// Configuración de red y servidor
+const char *ssid = "1500";         // Tu SSID
+const char *password = "Alfa7415";   // Tu contraseña
+#define SERVER_URL "http://192.168.0.9:8888/uploadAudio"  // Cambia la IP según la configuración de tu servidor
 
 // Configuración de I2S  
+// Se ha reasignado I2S_SD a PIN33 (antes estaba en 48) para evitar conflicto con el LED.
 #define I2S_WS         45
-#define I2S_SD         47    // Nota: se ha reasignado para evitar conflicto con el LED
+#define I2S_SD         47    // Usamos el pin 33 para SD
 #define I2S_SCK        39
 #define I2S_PORT       I2S_NUM_0
 #define I2S_SAMPLE_RATE (16000)
 #define I2S_SAMPLE_BITS (16)
 #define I2S_READ_LEN   (16 * 1024)
-#define RECORD_TIME    (5)   // Tiempo de grabación en segundos
+#define RECORD_TIME    (5)   // Tiempo en segundos de grabación
 #define I2S_CHANNEL_NUM (1)
 #define FLASH_RECORD_SIZE (I2S_CHANNEL_NUM * I2S_SAMPLE_RATE * I2S_SAMPLE_BITS / 8 * RECORD_TIME)
 
 // Configuración del pulsador (conectado entre GPIO21 y GND)
 const int buttonPin = 21;
 
-// Configuración del LED RGB (FastLED)
+// Configuración del LED RGB con FastLED
 #define LED_PIN 48         // LED en PIN48
 #define NUM_LEDS 1
 CRGB leds[NUM_LEDS];
 
+// Variables globales y de control
 File file;
 const char filename[] = "/recording.wav";
 const int headerSize = 44;
 bool isWIFIConnected = false;
-volatile bool recordingInProgress = false;  // Evita grabaciones simultáneas
+volatile bool recordingInProgress = false;  // Evita múltiples grabaciones simultáneas
 
-// -------------------------
-// VARIABLES PARA LA FOTO
-// -------------------------
-#define EEPROM_SIZE 1
-// Si deseas persistir el número de foto, puedes usar EEPROM (opcional)
-int pictureNumber = 0;
-
-// -------------------------
-// DECLARACIÓN DE FUNCIONES
-// -------------------------
+// Declaración de funciones
 void FFATInit();
 void i2sInit();
 void i2s_adc_data_scale(uint8_t *d_buff, uint8_t *s_buff, uint32_t len);
@@ -64,39 +49,35 @@ void wavHeader(byte *header, int wavSize);
 void listFFAT(void);
 void wifiConnect(void *pvParameters);
 void uploadFile();
-void capturePhoto(); // Nueva función para capturar la foto
 
-// -------------------------
-// SETUP Y LOOP
-// -------------------------
 void setup() {
-  Serial.begin(115200);
-  ets_printf("Serial inicializado a 115200\n");
+  ets_printf("Serial initialized at 115200\n");
 
-  // Inicializar FastLED y prender LED en verde (estado inactivo)
+  // Inicializar FastLED usando WS2812 y orden de colores GRB
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+  // Encender el LED en verde (estado inactivo)
   leds[0] = CRGB::Green;
   FastLED.show();
 
-  // Configurar el pulsador con resistencia interna pull-up
+  // Configurar el pulsador con resistencia pull‑up interna
   pinMode(buttonPin, INPUT_PULLUP);
 
   ets_printf("Presiona el pulsador para iniciar la grabación...\n");
 }
 
 void loop() {
-  // Si no se está grabando y se detecta pulsación (estado LOW)
+  // Si no se está grabando y se detecta pulsación (estado LOW) en el pulsador...
   if (!recordingInProgress && digitalRead(buttonPin) == LOW) {
-    delay(50); // Anti-rebote
+    delay(50); // Retardo para antirrebote
     if (digitalRead(buttonPin) == LOW) { // Confirmar pulsación
-      recordingInProgress = true;
-      ets_printf("Pulsador presionado. Iniciando grabación...\n");
+      recordingInProgress = true;  // Bloquear otras grabaciones
+      ets_printf("Pulsador presionado. Iniciando la grabación...\n");
 
-      // Cambiar LED a azul para indicar grabación
+      // Cambiar el LED a azul para indicar grabación
       leds[0] = CRGB::Blue;
       FastLED.show();
 
-      // Inicializar sistema de archivos FFAT, I2S y crear tareas para grabar y conectar WiFi
+      // Inicializar FFAT, I2S y crear tareas para grabar y conectar WiFi
       FFATInit();
       i2sInit();
       xTaskCreate(i2s_adc, "i2s_adc", 4096, NULL, 2, NULL);
@@ -114,24 +95,20 @@ void loop() {
   delay(10);
 }
 
-// -------------------------
-// FUNCIONES DE AUDIO
-// -------------------------
-
 void FFATInit() {
   if (!FFat.begin(true)) {
     ets_printf("¡Error al inicializar FFAT!\n");
     while (1) yield();
   }
 
-  // Borrar archivo previo y crear uno nuevo para grabar
+  // Borrar archivo previo (si existe) y abrir uno nuevo para grabar
   FFat.remove(filename);
   file = FFat.open(filename, FILE_WRITE);
   if (!file) {
     ets_printf("¡El archivo no está disponible!\n");
   }
 
-  // Escribir cabecera WAV
+  // Escribir la cabecera WAV
   byte header[headerSize];
   wavHeader(header, FLASH_RECORD_SIZE);
   file.write(header, headerSize);
@@ -183,7 +160,7 @@ void i2s_adc(void *arg) {
   char *i2s_read_buff = (char *)calloc(i2s_read_len, sizeof(char));
   uint8_t *flash_write_buff = (uint8_t *)calloc(i2s_read_len, sizeof(char));
 
-  // Sincronizar el I2S con dos lecturas iniciales
+  // Realizar dos lecturas iniciales para sincronizar el I2S
   i2s_read(I2S_PORT, (void *)i2s_read_buff, i2s_read_len, &bytes_read, portMAX_DELAY);
   i2s_read(I2S_PORT, (void *)i2s_read_buff, i2s_read_len, &bytes_read, portMAX_DELAY);
 
@@ -199,16 +176,17 @@ void i2s_adc(void *arg) {
   ets_printf("¡Grabación finalizada!\n");
 
   file.close();
+
   free(i2s_read_buff);
   free(flash_write_buff);
+
   listFFAT();
 
-  // Una vez grabado, si ya se conectó al WiFi se procede a subir el archivo.
   if (isWIFIConnected) {
     uploadFile();
   }
   
-  // Cambiar LED a verde al finalizar
+  // Al finalizar la grabación, cambiar el LED a verde
   leds[0] = CRGB::Green;
   FastLED.show();
 
@@ -268,6 +246,7 @@ void wavHeader(byte *header, int wavSize) {
 void listFFAT(void) {
   ets_printf("\r\nListado de archivos FFAT:\n");
   static const char line[] = "=================================================";
+
   ets_printf("%s\n", line);
   ets_printf("  Nombre del archivo                    Tamaño\n");
   ets_printf("%s\n", line);
@@ -334,8 +313,9 @@ void uploadFile() {
   }
 
   ets_printf("===> Subiendo archivo al servidor\n");
+
   HTTPClient client;
-  client.begin(SERVER_URL); // Dirección del servidor
+  client.begin(SERVER_URL); // Dirección del servidor (por ejemplo, un servidor Python WSGI)
   client.addHeader("Content-Type", "audio/wav");
   int httpResponseCode = client.sendRequest("POST", &file, file.size());
   ets_printf("httpResponseCode: %d\n", httpResponseCode);
@@ -345,53 +325,9 @@ void uploadFile() {
     ets_printf("==================== Transcripción ====================\n");
     ets_printf("%s\n", response.c_str());
     ets_printf("====================      Fin      ====================\n");
-
-    // Si la transcripción contiene "capturar foto", se invoca la función para capturarla
-    if (response.indexOf("capturar foto") >= 0) {
-      ets_printf("Transcripción indica 'capturar foto'. Iniciando captura...\n");
-      capturePhoto();
-    }
   } else {
     ets_printf("Error en la solicitud HTTP\n");
   }
   file.close();
   client.end();
-}
-
-// -------------------------
-// FUNCIÓN PARA CAPTURAR FOTO
-// -------------------------
-void capturePhoto() {
-  // Inicializar cámara y SD (asegúrate de que estas funciones estén implementadas en tus utilidades)
-  ets_printf("CAPTURA INICIADA\n");
-  init_camera();
-  init_sdcard();
-
-  // Capturar la imagen con la cámara
-  camera_fb_t *fb = esp_camera_fb_get();
-  if (!fb) {
-    ets_printf("¡Error al capturar foto!\n");
-    return;
-  }
-
-  // Opcional: usar EEPROM para llevar la cuenta de las fotos guardadas
-  EEPROM.begin(EEPROM_SIZE);
-  pictureNumber = EEPROM.read(0);
-  pictureNumber++;
-  
-  String path = "/picture" + String(pictureNumber) + ".jpg";
-  fs::FS &fs = SD_MMC;
-  ets_printf("Guardando foto en: %s\n", path.c_str());
-  
-  File filePhoto = fs.open(path.c_str(), FILE_WRITE);
-  if (!filePhoto) {
-    ets_printf("Error al abrir el archivo para escribir la foto\n");
-  } else {
-    filePhoto.write(fb->buf, fb->len);
-    ets_printf("Foto guardada en: %s\n", path.c_str());
-    EEPROM.write(0, pictureNumber);
-    EEPROM.commit();
-  }
-  filePhoto.close();
-  esp_camera_fb_return(fb);
 }
