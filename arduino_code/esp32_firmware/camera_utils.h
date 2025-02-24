@@ -1,8 +1,7 @@
 #include "esp_camera.h"
 #include "camera_pins.h"
 
-void init_camera()
-{
+bool init_camera() {
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -32,7 +31,7 @@ void init_camera()
   config.fb_count = 1;
 
   // if PSRAM IC present, init with UXGA resolution and higher JPEG quality
-  //                      for larger pre-allocated frame buffer.
+  // for larger pre-allocated frame buffer.
   if (config.pixel_format == PIXFORMAT_JPEG) {
     if (psramFound()) {
       config.frame_size = FRAMESIZE_UXGA;
@@ -48,11 +47,10 @@ void init_camera()
   } else {
     // Best option for face detection/recognition
     config.frame_size = FRAMESIZE_240X240;
-
   #if CONFIG_IDF_TARGET_ESP32S3
       config.fb_count = 2;
   #endif
-    }
+  }
 
   #if defined(CAMERA_MODEL_ESP_EYE)
     pinMode(13, INPUT_PULLUP);
@@ -63,7 +61,7 @@ void init_camera()
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("Camera init failed with error 0x%x", err);
-    return;
+    return false;
   }
 
   sensor_t * s = esp_camera_sensor_get();
@@ -91,4 +89,5 @@ void init_camera()
   // s->set_dcw(s, 1);            // 0 = disable , 1 = enable
   // s->set_colorbar(s, 0);       // 0 = disable , 1 = enable
 
+  return true;
 }

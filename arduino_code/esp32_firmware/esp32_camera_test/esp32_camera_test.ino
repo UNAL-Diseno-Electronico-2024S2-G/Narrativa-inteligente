@@ -15,20 +15,20 @@
 // -------------------------
 // CONFIGURACIONES DEL AUDIO
 // -------------------------
-const char *ssid = "lab_control";         // Tu SSID
-const char *password = "lab_control";   // Tu contraseña
-#define SERVER_URL "http://192.168.1.111:8888/uploadAudio"  // Servidor de audio
+const char *ssid = "EMILIO1234";         // Tu SSID
+const char *password = "Angelita";   // Tu contraseña
+#define SERVER_URL "http://192.168.1.21:8888/uploadAudio"  // Servidor de audio
 
 // -------------------------
 // CONFIGURACIÓN PARA ENVÍO DE FOTO
 // -------------------------
-#define PHOTO_SERVER_URL "http://192.168.1.111:8888/uploadPhoto"
+#define PHOTO_SERVER_URL "http://192.168.1.21:8888/uploadPhoto"
 // La foto capturada se guardará con un nombre dinámico ("/pictureX.jpg")
 
 // Configuración de I2S  
-#define I2S_WS         45
-#define I2S_SD         47    // Reasignado para evitar conflicto con el LED
-#define I2S_SCK        39
+#define I2S_WS         47
+#define I2S_SD         41   // Reasignado para evitar conflicto con el LED
+#define I2S_SCK        42
 #define I2S_PORT       I2S_NUM_0
 #define I2S_SAMPLE_RATE (16000)
 #define I2S_SAMPLE_BITS (16)
