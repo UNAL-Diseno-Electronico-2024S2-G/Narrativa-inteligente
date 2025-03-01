@@ -1,3 +1,5 @@
+#include <wav_header.h>
+
 #include "SD_MMC.h"            // SD Card ESP32
 #include "FS.h"
 #include "FFat.h"
@@ -15,8 +17,8 @@
 #include "../gpio_pins.h"
 #include <EEPROM.h>             // Para llevar el número de foto
 
-#define SERVER_URL "http://192.168.1.11:8888/uploadAudio"
-#define PHOTO_SERVER_URL "http://192.168.1.11:8888/uploadPhoto"
+#define SERVER_URL "http://10.203.140.73:8888/uploadAudio"
+#define PHOTO_SERVER_URL "http://10.203.140.73:8888/uploadPhoto"
 
 #define WAV_HEADER_SIZE 44  // Tamaño típico de cabecera WAV
 
