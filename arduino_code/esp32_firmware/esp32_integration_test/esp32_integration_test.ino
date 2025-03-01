@@ -14,6 +14,7 @@
 #include "../sd_card_utils.h"   // Función init_sdcard() y demás
 #include "../wifi_utils.h"
 #include "../i2s_utils.h"
+#include "../max_utils.h"
 #include "../gpio_pins.h"
 #include <EEPROM.h>             // Para llevar el número de foto
 
@@ -29,10 +30,26 @@ const char audio_file_name[] = "/recording.wav";
 
 bool recordingInProgress = false;
 
+I2SClass* i2s = nullptr;
+I2SClass* i2s_max = nullptr;
+File audioFile;
+
+// Se pasa el objeto File por referencia para modificar la posición del archivo original
+void skipWavHeader(File &file) {
+  file.seek(44);
+}
+
 void setup() {
     Serial.begin(115200);
     ets_printf("Serial inicializado a 115200\n");
     
+    if (psramInit()) {
+        Serial.println("PSRAM activada correctamente.");
+        Serial.printf("PSRAM libre: %d bytes\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    } else {
+        Serial.println("Error: PSRAM no disponible.");
+    }
+
     // Inicializar FastLED y prender LED en verde (estado inactivo)
     FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
     leds[0] = CRGB::Green;
@@ -41,17 +58,24 @@ void setup() {
     // Configurar el pulsador con resistencia interna pull-up
     pinMode(buttonPin, INPUT_PULLUP);
   
-    // Inicializar WiFi (suponiendo que la función init_wifi() esté definida en otro lado)
+    // Inicializar WiFi (suponiendo que init_wifi() esté definida en otro lado)
     init_wifi();
     delay(500);
   
     // Inicializar el bus I2S mediante la función modular
-    I2SClass* i2s = init_i2s();
+    i2s = init_i2s();
     if (!i2s) {
       Serial.println("Error al inicializar el bus I2S!");
       return;
     }
-  
+
+    // Inicializar el bus I2S MAX mediante la función modular
+    i2s_max = init_i2s_max();
+    if (!i2s_max) {
+      Serial.println("Error al inicializar el bus I2S MAX!");
+      return;
+    }
+    
     // Inicializar la tarjeta SD usando la función modular
     Serial.println("Inicializando tarjeta SD...");
     FS* sd = init_sdcard();
@@ -61,57 +85,46 @@ void setup() {
     }
     Serial.println("Tarjeta SD inicializada.");
   
-    // Uso de las funciones para manipular el sistema de archivos
-    listDir(*sd, "/", 0);
-    createDir(*sd, "/mydir");
-    listDir(*sd, "/", 0);
-    removeDir(*sd, "/mydir");
-    listDir(*sd, "/", 2);
-    writeFile(*sd, "/hello.txt", "Hello ");
-    appendFile(*sd, "/hello.txt", "World!\n");
-    readFile(*sd, "/hello.txt");
-    deleteFile(*sd, "/foo.txt");
-    renameFile(*sd, "/hello.txt", "/foo.txt");
-    readFile(*sd, "/foo.txt");
-    testFileIO(*sd, "/test.txt");
-    Serial.printf("Total space: %lluMB\n", SD_MMC.totalBytes() / (1024 * 1024));
-    Serial.printf("Used space: %lluMB\n", SD_MMC.usedBytes() / (1024 * 1024));
-  
-    // Inicializar la cámara usando init_camera()
-    // if (!init_camera()) {
-    //     Serial.println("Error al inicializar la cámara.");
-    // } else {
-    //     Serial.println("Cámara inicializada.");
-    //     // Capturar foto
-    //     camera_fb_t *fb = esp_camera_fb_get();
-    //     if (!fb) {
-    //         Serial.println("Error al capturar la foto.");
-    //     } else {
-    //         Serial.println("Foto capturada, guardando en la tarjeta SD...");
-    //         // Guardar la imagen capturada en la SD
-    //         writeBinaryFile(*sd, img_file_name, fb->buf, fb->len);
-    //         Serial.println("Foto guardada en SD.");
-    //         // Liberar el frame buffer de la cámara
-    //         esp_camera_fb_return(fb);
-    //     }
-    // }
-    
     // Grabar 5 segundos de audio utilizando la función recordWAV de I2S
     uint8_t* wav_buffer;
     size_t wav_size;
     Serial.println("Grabando 5 segundos de audio...");
     wav_buffer = i2s->recordWAV(5, &wav_size);
+    if (!wav_buffer) {
+      Serial.println("Error al grabar audio.");
+      return;
+    }
   
     // Almacenar el audio grabado en la tarjeta SD
     writeBinaryFile(*sd, "/test.wav", wav_buffer, wav_size);
   
+    // Abrir el archivo WAV
+    audioFile = sd->open("/test.wav");
+    if (!audioFile) {
+        Serial.println("Failed to open file!");
+        while (1);
+    }
+
+    Serial.println("Playing audio...");
+    skipWavHeader(audioFile);
+
     Serial.println("Aplicación completa.");
 
     uploadFile("/test.wav");
+    Serial.printf("PSRAM libre: %d bytes\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
   
 void loop() {
-    delay(10);
+  uint8_t buffer[512];  // Buffer para datos de audio
+  while (audioFile.available()) {
+      int bytesRead = audioFile.read(buffer, sizeof(buffer));
+      if (bytesRead > 0) {
+        i2s_max->write((const uint8_t*)buffer, bytesRead);
+      }
+  }
+  audioFile.close();
+  Serial.println("Finished playing.");
+  while (1);
 }
 
 void uploadPhoto(const char *photoPath) {
@@ -182,9 +195,9 @@ void uploadPhoto(const char *photoPath) {
       ets_printf("Error en la subida: %d\n", httpResponseCode);
     }
     http.end();
-  }
+}
 
-  void uploadFile(const char *filePath) {
+void uploadFile(const char *filePath) {
     // Abrir el archivo de audio desde SD_MMC usando el path recibido
     File file = SD_MMC.open(filePath, FILE_READ);
     if (!file) {
@@ -216,5 +229,4 @@ void uploadPhoto(const char *photoPath) {
   
     file.close();
     client.end();
-  }
-  
+}

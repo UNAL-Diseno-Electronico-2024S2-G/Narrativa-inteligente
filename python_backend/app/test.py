@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import os
 import speech_recognition as sr
 
 app = Flask(__name__)
-file_name = 'recording.wav'
+file_name = 'output.wav'
+file_path = os.path.abspath(file_name)
 
 UPLOAD_FOLDER = "/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/api/images"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # Asegura que la carpeta exista
@@ -35,6 +36,19 @@ def upload_photo():
     file.save(file_path)
 
     return "File uploaded successfully", 200
+
+@app.route('/downloadAudio', methods=['GET'])
+def download_audio():
+    try:
+        # Verifica si el archivo existe
+        if not os.path.exists(file_name):
+            return "El archivo no existe", 404
+        
+        # Envía el archivo "recording.wav" para su descarga utilizando la ruta absoluta
+        return send_file(file_path, mimetype='audio/wav', as_attachment=True)
+    except Exception as e:
+        return str(e), 500
+
 
 def speech_to_text(file_name):
     # Inicializar el recognizer
