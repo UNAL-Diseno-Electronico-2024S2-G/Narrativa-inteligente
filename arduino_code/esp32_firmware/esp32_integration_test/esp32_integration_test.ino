@@ -39,8 +39,8 @@ void setup() {
   Serial.println("Iniciando setup...");
 
   // Inicializar botones
-  pinMode(1, INPUT_PULLUP);
-  pinMode(42, INPUT_PULLUP);
+  pinMode(1, INPUT_PULLUP); // Reproducir audio
+  pinMode(42, INPUT_PULLUP); // Tomar foto
   pinMode(43, INPUT_PULLUP);
 
   // Inicializar WiFi
@@ -91,6 +91,8 @@ void setup() {
 void loop() {
   // Aquí va el resto del código principal
   if (digitalRead(1) == LOW) {
+    record_push_audio_to_SD(sd, audio_file_name, 1, 12.0);
+    uploadFile(audio_file_name);
     if (!play_audio_from_sd(sd, audio_file_name)) {  // Usar el puntero sd
       Serial.println("Error al reproducir el archivo de audio.");
     }

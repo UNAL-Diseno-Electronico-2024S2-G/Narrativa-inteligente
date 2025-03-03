@@ -145,6 +145,65 @@ void record_audio_to_SD(FS* sd, const char* filename, uint32_t record_time_ms, f
   Serial.println("Grabación finalizada.");
 }
 
+void record_push_audio_to_SD(FS* sd, const char* filename, int button_pin, float gain = 1.0) {
+  size_t bytes_read;
+  File file = sd->open(filename, FILE_WRITE);
+  if (!file) {
+    Serial.println("Error al abrir el archivo para escritura!");
+    return;
+  }
+
+  // Escribir el encabezado WAV (tamaño de datos inicialmente 0)
+  writeWavHeader(file, SAMPLE_RATE, 16, 1, 0);
+
+  // Variables para diagnóstico
+  int16_t max_sample = -32768;
+  int16_t min_sample = 32767;
+
+  // Grabar mientras el botón esté presionado
+  Serial.println("Iniciando grabación...");
+  uint32_t total_bytes_written = 0;
+  while (digitalRead(button_pin) == LOW) {  // Mientras el botón esté presionado
+    i2s_read(I2S_NUM_0, i2s_readraw_buff, SAMPLE_BUFFER_SIZE * sizeof(int16_t), &bytes_read, portMAX_DELAY);
+
+    // Aplicar ganancia a las muestras de audio
+    for (size_t i = 0; i < bytes_read / sizeof(int16_t); i++) {
+      int32_t sample = i2s_readraw_buff[i] * gain; // Multiplicar por el factor de ganancia
+
+      // Limitar el valor para evitar saturación
+      if (sample > 32767) {
+        sample = 32767;
+      } else if (sample < -32768) {
+        sample = -32768;
+      }
+
+      i2s_readraw_buff[i] = (int16_t)sample; // Guardar la muestra ajustada
+
+      // Actualizar valores máximo y mínimo para diagnóstico
+      if (i2s_readraw_buff[i] > max_sample) {
+        max_sample = i2s_readraw_buff[i];
+      }
+      if (i2s_readraw_buff[i] < min_sample) {
+        min_sample = i2s_readraw_buff[i];
+      }
+    }
+
+    file.write((uint8_t*)i2s_readraw_buff, bytes_read);
+    total_bytes_written += bytes_read;
+  }
+
+  // Mostrar información de diagnóstico
+  Serial.printf("Máxima muestra: %d\n", max_sample);
+  Serial.printf("Mínima muestra: %d\n", min_sample);
+
+  // Actualizar el encabezado WAV con el tamaño correcto de los datos
+  file.seek(0); // Volver al inicio del archivo
+  writeWavHeader(file, SAMPLE_RATE, 16, 1, total_bytes_written);
+
+  file.close();
+  Serial.println("Grabación finalizada.");
+}
+
 // Función para desinstalar el driver I2S del micrófono
 bool deinit_i2s_mic() {
     // Desinstalar el driver I2S
