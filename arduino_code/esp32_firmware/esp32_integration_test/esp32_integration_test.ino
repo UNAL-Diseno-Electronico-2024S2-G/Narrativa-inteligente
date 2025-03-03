@@ -1,130 +1,103 @@
-#include <wav_header.h>
-
-#include "SD_MMC.h"            // SD Card ESP32
-#include "FS.h"
-#include "FFat.h"
-#include <HTTPClient.h>
-#include <string.h>
-#include <stdio.h>
-#include <FastLED.h>
-#include "ESP_I2S.h"
-
-// Incluir librerías para la cámara y la tarjeta SD
-#include "../camera_utils.h"    // Función init_camera() y demás
-#include "../sd_card_utils.h"   // Función init_sdcard() y demás
 #include "../wifi_utils.h"
+#include "../camera_utils.h"
+#include "../sd_card_utils.h"
 #include "../i2s_utils.h"
 #include "../max_utils.h"
 #include "../gpio_pins.h"
-#include <EEPROM.h>             // Para llevar el número de foto
+
+#include "Arduino.h"
+#include "FS.h"                // SD Card ESP32
+#include "soc/soc.h"           // Disable brownout problems
+#include "soc/rtc_cntl_reg.h"  // Disable brownout problems
+#include "driver/rtc_io.h"
+#include <EEPROM.h>            // read and write from flash memory
+#include <HTTPClient.h>
+#include <FastLED.h>
 
 #define SERVER_URL "http://10.203.140.73:8888/uploadAudio"
 #define PHOTO_SERVER_URL "http://10.203.140.73:8888/uploadPhoto"
 
-#define WAV_HEADER_SIZE 44  // Tamaño típico de cabecera WAV
-
-CRGB leds[NUM_LEDS];
-
 const char img_file_name[] = "/image.jpg";
-const char audio_file_name[] = "/recording.wav";
+const char audio_file_name[] = "/test.wav";
 
-bool recordingInProgress = false;
+// Variables globales
+CRGB leds[NUM_LEDS];   // Control de LEDs
+FS* sd;                // Declarar el puntero sd como global
 
-I2SClass* i2s = nullptr;
-I2SClass* i2s_max = nullptr;
-File audioFile;
-
-// Se pasa el objeto File por referencia para modificar la posición del archivo original
-void skipWavHeader(File &file) {
-  file.seek(44);
-}
+// Prototipos de funciones
+void init_wifi();
+FS* init_sdcard();
+bool init_camera();
+bool init_i2s_mic();
+bool init_i2s_speaker();
+bool deinit_i2s_mic();
+bool deinit_i2s_speaker();
 
 void setup() {
-    Serial.begin(115200);
-    ets_printf("Serial inicializado a 115200\n");
-    
-    if (psramInit()) {
-        Serial.println("PSRAM activada correctamente.");
-        Serial.printf("PSRAM libre: %d bytes\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-    } else {
-        Serial.println("Error: PSRAM no disponible.");
-    }
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println("Iniciando setup...");
 
-    // Inicializar FastLED y prender LED en verde (estado inactivo)
-    FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-    leds[0] = CRGB::Green;
-    FastLED.show();
-    
-    // Configurar el pulsador con resistencia interna pull-up
-    pinMode(buttonPin, INPUT_PULLUP);
-  
-    // Inicializar WiFi (suponiendo que init_wifi() esté definida en otro lado)
-    init_wifi();
-    delay(500);
-  
-    // Inicializar el bus I2S mediante la función modular
-    i2s = init_i2s();
-    if (!i2s) {
-      Serial.println("Error al inicializar el bus I2S!");
-      return;
-    }
+  // Inicializar botones
+  pinMode(1, INPUT_PULLUP);
+  pinMode(42, INPUT_PULLUP);
+  pinMode(43, INPUT_PULLUP);
 
-    // Inicializar el bus I2S MAX mediante la función modular
-    i2s_max = init_i2s_max();
-    if (!i2s_max) {
-      Serial.println("Error al inicializar el bus I2S MAX!");
-      return;
-    }
-    
-    // Inicializar la tarjeta SD usando la función modular
-    Serial.println("Inicializando tarjeta SD...");
-    FS* sd = init_sdcard();
-    if (!sd) {
-      Serial.println("Fallo al inicializar la tarjeta SD!");
-      return;
-    }
-    Serial.println("Tarjeta SD inicializada.");
-  
-    // Grabar 5 segundos de audio utilizando la función recordWAV de I2S
-    uint8_t* wav_buffer;
-    size_t wav_size;
-    Serial.println("Grabando 5 segundos de audio...");
-    wav_buffer = i2s->recordWAV(5, &wav_size);
-    if (!wav_buffer) {
-      Serial.println("Error al grabar audio.");
-      return;
-    }
-  
-    // Almacenar el audio grabado en la tarjeta SD
-    writeBinaryFile(*sd, "/test.wav", wav_buffer, wav_size);
-  
-    // Abrir el archivo WAV
-    audioFile = sd->open("/test.wav");
-    if (!audioFile) {
-        Serial.println("Failed to open file!");
-        while (1);
-    }
+  // Inicializar WiFi
+  init_wifi();
+  delay(100);
+  Serial.println("WiFi inicializado.");
 
-    Serial.println("Playing audio...");
-    skipWavHeader(audioFile);
-
-    Serial.println("Aplicación completa.");
-
-    uploadFile("/test.wav");
-    Serial.printf("PSRAM libre: %d bytes\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-}
-  
-void loop() {
-  uint8_t buffer[512];  // Buffer para datos de audio
-  while (audioFile.available()) {
-      int bytesRead = audioFile.read(buffer, sizeof(buffer));
-      if (bytesRead > 0) {
-        i2s_max->write((const uint8_t*)buffer, bytesRead);
-      }
+  // Inicializar tarjeta SD
+  Serial.println("Inicializando tarjeta SD...");
+  sd = init_sdcard();  // Asignar el puntero sd
+  if (!sd) {
+    Serial.println("Fallo al inicializar la tarjeta SD!");
+    return;
   }
-  audioFile.close();
-  Serial.println("Finished playing.");
-  while (1);
+  Serial.println("Tarjeta SD inicializada.");
+  delay(100);
+
+  // Inicializar cámara
+  if (!init_camera()) {
+    Serial.println("Error al inicializar la cámara.");
+    return;
+  }
+  Serial.println("Cámara inicializada.");
+  delay(100);
+
+  // Inicializar LEDs
+  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
+  leds[0] = CRGB::Green;
+  FastLED.show();
+  delay(100);
+  Serial.println("LEDs inicializados.");
+
+  if (!init_i2s_mic()) {
+    Serial.println("Fallo al inicializar el micrófono I2S!");
+    return;
+  }
+  delay(100);
+
+  if (!init_i2s_speaker()) {
+    Serial.println("Fallo al inicializar el MAX98357 I2S!");
+    return;
+  }
+  delay(100);
+
+  Serial.println("Setup completado. Esperando acciones del usuario...");
+}
+
+void loop() {
+  // Aquí va el resto del código principal
+  if (digitalRead(1) == LOW) {
+    if (!play_audio_from_sd(sd, audio_file_name)) {  // Usar el puntero sd
+      Serial.println("Error al reproducir el archivo de audio.");
+    }
+  }
+  // } else if (digitalRead(42) == LOW) {
+  //   // Lógica para otro botón
+  // }
 }
 
 void uploadPhoto(const char *photoPath) {

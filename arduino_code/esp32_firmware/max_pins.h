@@ -4,7 +4,7 @@
 
 // Tamaño del buffer de audio
 #define AUDIO_BUFFER_SIZE 512
-#define I2S_NUM         I2S_NUM_0
+#define I2S_NUM         I2S_NUM_1
 #define SAMPLE_RATE 8000      // Tasa de muestreo
 #define SAMPLE_BUFFER_SIZE 512
 #define I2S_BCK         2          // Bit Clock (BCLK)

@@ -40,6 +40,8 @@ bool init_i2s_mic() {
     return false;
   }
 
+  Serial.println("Micrófono I2S inicializado correctamente.");
+
   return true;
 }
 
@@ -141,4 +143,17 @@ void record_audio_to_SD(FS* sd, const char* filename, uint32_t record_time_ms, f
 
   file.close();
   Serial.println("Grabación finalizada.");
+}
+
+// Función para desinstalar el driver I2S del micrófono
+bool deinit_i2s_mic() {
+    // Desinstalar el driver I2S
+    esp_err_t err = i2s_driver_uninstall(I2S_NUM_0);
+    if (err != ESP_OK) {
+        Serial.printf("Error al desinstalar el driver I2S: %d\n", err);
+        return false;
+    }
+
+    Serial.println("Driver I2S del micrófono desinstalado correctamente.");
+    return true;
 }

@@ -28,24 +28,26 @@ bool init_i2s_speaker() {
     };
 
     // Instalar y configurar el driver I2S
-    esp_err_t err = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
+    esp_err_t err = i2s_driver_install(I2S_NUM_1, &i2s_config, 0, NULL);
     if (err != ESP_OK) {
         Serial.printf("Error al instalar el driver I2S: %d\n", err);
         return false;
     }
 
-    err = i2s_set_pin(I2S_NUM_0, &pin_config);
+    err = i2s_set_pin(I2S_NUM_1, &pin_config);
     if (err != ESP_OK) {
         Serial.printf("Error al configurar los pines I2S: %d\n", err);
         return false;
     }
+
+    Serial.println("MAX98357 I2S inicializado correctamente.");
 
     return true;
 }
 
 void play_audio(int16_t* audio_data, size_t audio_size) {
     size_t bytes_written;
-    esp_err_t err = i2s_write(I2S_NUM_0, audio_data, audio_size * sizeof(int16_t), &bytes_written, portMAX_DELAY);
+    esp_err_t err = i2s_write(I2S_NUM_1, audio_data, audio_size * sizeof(int16_t), &bytes_written, portMAX_DELAY);
     if (err != ESP_OK) {
         Serial.printf("Error al escribir datos I2S: %d\n", err);
     }
@@ -77,7 +79,7 @@ bool play_audio_from_sd(FS* sd, const char* filePath) {
   size_t bytesRead;
   while ((bytesRead = audioFile.read(audioBuffer, AUDIO_BUFFER_SIZE)) > 0) {
     size_t bytesWritten;
-    esp_err_t err = i2s_write(I2S_NUM_0, audioBuffer, bytesRead, &bytesWritten, portMAX_DELAY);
+    esp_err_t err = i2s_write(I2S_NUM_1, audioBuffer, bytesRead, &bytesWritten, portMAX_DELAY);
     if (err != ESP_OK) {
       Serial.printf("Error al escribir datos I2S: %d\n", err);
       break;
@@ -89,4 +91,17 @@ bool play_audio_from_sd(FS* sd, const char* filePath) {
   Serial.println("Reproducción de audio finalizada.");
 
   return true;
+}
+
+// Función para desinstalar el driver I2S
+bool deinit_i2s_speaker() {
+    // Desinstalar el driver I2S
+    esp_err_t err = i2s_driver_uninstall(I2S_NUM_1);
+    if (err != ESP_OK) {
+        Serial.printf("Error al desinstalar el driver I2S: %d\n", err);
+        return false;
+    }
+
+    Serial.println("Driver I2S desinstalado correctamente.");
+    return true;
 }
