@@ -118,12 +118,12 @@ void listDir(fs::FS &fs, const char *dirname, uint8_t levels) {
     }
   }
   
-void writeBinaryFile(fs::FS &fs, const char *path, const uint8_t *data, size_t size) {
+bool writeBinaryFile(fs::FS &fs, const char *path, const uint8_t *data, size_t size) {
     Serial.printf("Escribiendo archivo binario: %s\n", path);
     File file = fs.open(path, FILE_WRITE);
     if (!file) {
         Serial.println("No se pudo abrir el archivo para escribir");
-        return;
+        return false;
     }
     // Escribir los datos binarios y verificar que se hayan escrito todos
     if (file.write(data, size) == size) {
@@ -132,6 +132,7 @@ void writeBinaryFile(fs::FS &fs, const char *path, const uint8_t *data, size_t s
         Serial.println("Error al escribir el archivo binario");
     }
     file.close();
+    return true;
 }
 
   void appendFile(fs::FS &fs, const char *path, const char *message) {

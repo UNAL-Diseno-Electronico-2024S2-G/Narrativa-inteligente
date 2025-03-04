@@ -1,5 +1,6 @@
 #include "esp_camera.h"
 #include "camera_pins.h"
+#include "FS.h"
 
 bool init_camera()
 {

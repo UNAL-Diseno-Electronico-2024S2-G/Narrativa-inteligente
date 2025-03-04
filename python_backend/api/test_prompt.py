@@ -38,7 +38,7 @@ def format_system_msg(user_data):
     return system_msg
 
 
-def format_human_msg(user_data, image_data):
+def format_human_msg(user_data, image_data, image_type):
     """Creates a user message with an image prompt for the model."""
     user_name = user_data.get("user_name", "there")  # Usa "there" si no hay nombre
     detail_level = user_data.get("detail_level", "detailed")  # Preferencia del usuario
@@ -48,7 +48,7 @@ def format_human_msg(user_data, image_data):
             {
                 "type": "text",
                 "text": (
-                    f"Hi {user_name}, please describe this image with **maximum detail**. "
+                    f"Hi, I am {user_name}, please describe this image of {image_type} pĺace with **maximum detail**. "
                     "Make sure to include all key elements, colors, shapes, textures, lighting conditions, and any recognizable objects or people. "
                     "If the user prefers additional information, describe possible emotions, context, or interactions in the scene. "
                     f"Adjust the tone to be {user_data.get('tone_preference', 'natural and friendly')} and the level of detail should be {detail_level}."
@@ -62,6 +62,82 @@ def format_human_msg(user_data, image_data):
     )
     return message
 
+
+def format_classification(image_data):
+    message = HumanMessage(
+    content=[
+        {
+            "type": "text",
+            "text": ( "Please classify this image as urban, nature, indoor, or historical and cultural:"
+            )
+        },
+        {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
+        },
+    ]
+    )
+
+    # classification_template = ChatPromptTemplate.from_messages(
+    # [
+    #     ("system", "You are a helpful vision assistant."),
+    #     ("human", message)
+    # ]
+    # )
+
+    # return classification_template
+
+def format_urban_prompts(user_data, image_data):
+    """Genera el prompt con los datos del usuario y el mensaje del sistema."""
+    system_msg = format_system_msg(user_data)
+    class_urban_msg = format_human_msg(user_data, image_data, "urban")
+
+    prompt_template = ChatPromptTemplate.from_messages([
+        ("system", system_msg),
+        ("human","Please describe this image of urban pĺace, making effort in streets, squares, transport stations, etc."),
+        ("human", class_urban_msg)
+    ])
+
+    return prompt_template
+
+def format_nature_prompts(user_data, image_data):
+    """Genera el prompt con los datos del usuario y el mensaje del sistema."""
+    system_msg = format_system_msg(user_data)
+    class_nature_msg = format_human_msg(user_data, image_data, "nature")
+
+    prompt_template = ChatPromptTemplate.from_messages([
+        ("system", system_msg),
+        ("human","Please describe this image of nature pĺace, making effort in parks, mountains, rivers, etc."),
+        ("human", class_nature_msg)
+    ])
+
+    return prompt_template
+
+def format_indoor_prompts(user_data, image_data):
+    """Genera el prompt con los datos del usuario y el mensaje del sistema."""
+    system_msg = format_system_msg(user_data)
+    class_indoor_msg = format_human_msg(user_data, image_data, "indoor")
+
+    prompt_template = ChatPromptTemplate.from_messages([
+        ("system", system_msg),
+        ("human","Please describe this image of indoor pĺace, making effort in chairs, sofas, beds, tables, etc."),
+        ("human", class_indoor_msg)
+    ])
+
+    return prompt_template
+
+def format_historical_prompts(user_data, image_data):
+    """Genera el prompt con los datos del usuario y el mensaje del sistema."""
+    system_msg = format_system_msg(user_data)
+    class_historical_msg = format_human_msg(user_data, image_data, "historical and cultural")
+
+    prompt_template = ChatPromptTemplate.from_messages([
+        ("system", system_msg),
+        ("human","Please describe this image of historical and cultural pĺace, making effort in monuments, churches, archaeological sites, etc."),
+        ("human", class_historical_msg)
+    ])
+
+    return prompt_template
 
 def format_prompts(user_data):
     """Genera el prompt con los datos del usuario y el mensaje del sistema."""
