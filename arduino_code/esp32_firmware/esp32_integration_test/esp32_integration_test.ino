@@ -14,9 +14,9 @@
 #include <HTTPClient.h>
 #include <FastLED.h>
 
-#define SERVER_URL "http://192.168.1.11:8888/uploadAudio"
-#define SERVER_URL_D "http://192.168.1.11:8888/downloadAudio"
-#define PHOTO_SERVER_URL "http://192.168.1.11:8888/uploadPhoto"
+#define SERVER_URL "http://10.203.140.73:8888/uploadAudio"
+#define SERVER_URL_D "http://10.203.140.73:8888/downloadAudio"
+#define PHOTO_SERVER_URL "http://10.203.140.73:8888/uploadPhoto"
 
 const char img_file_name[] = "/image.jpg";
 const char audio_file_name[] = "/test.wav";
@@ -95,14 +95,13 @@ void setup() {
 
 void loop() {
   // Aquí va el resto del código principal
-  // if (digitalRead(1) == LOW) {
-  //   record_push_audio_to_SD(sd, audio_file_name, 1, 12.0);
-  //   uploadFile(audio_file_name);
-  //   if (!play_audio_from_sd(sd, audio_file_name)) {  // Usar el puntero sd
-  //     ets_printf("Error al reproducir el archivo de audio.\n");
-  //   }
-  // } else 
-  if (digitalRead(42) == LOW) {
+  if (digitalRead(1) == HIGH) {
+    record_push_audio_to_SD(sd, audio_file_name, 1, 12.0);
+    uploadFile(audio_file_name);
+    if (!play_audio_from_sd(sd, audio_file_name)) {  // Usar el puntero sd
+      ets_printf("Error al reproducir el archivo de audio.\n");
+    }
+  } else if (digitalRead(42) == HIGH) {
     // Lógica para tomar foto
     if (capture_and_save_photo(sd, img_file_name)) {
       uploadPhoto(img_file_name);
@@ -230,7 +229,7 @@ void waitAndDownloadAudio(const char* audioFilePath) {
 
     // Try to download from /checkAudio
     HTTPClient http;
-    http.begin("http://192.168.1.11:8888/checkAudio");
+    http.begin("http://10.203.140.73:8888/checkAudio");
     int httpResponseCode = http.GET();
 
     if (httpResponseCode == 200) {
@@ -263,8 +262,8 @@ void uploadFile(const char *filePath) {
   // Abrir el archivo de audio desde SD_MMC usando el path recibido
   File file = SD_MMC.open(filePath, FILE_READ);
   if (!file) {
-    ets_printf("El archivo no está disponible!\n");
-    return;
+      ets_printf("El archivo no está disponible!\n");
+      return;
   }
 
   ets_printf("===> Subiendo archivo al servidor\n");
@@ -276,26 +275,39 @@ void uploadFile(const char *filePath) {
   ets_printf("httpResponseCode: %d\n", httpResponseCode);
 
   if (httpResponseCode == 200) {
-    String response = client.getString();
-    ets_printf("==================== Transcripción ====================\n");
-    ets_printf("%s\n", response.c_str());
-    ets_printf("====================      Fin      ====================\n");
+      String response = client.getString();
+      ets_printf("==================== Transcripción ====================\n");
+      ets_printf("%s\n", response.c_str());
+      ets_printf("==================== Fin ====================\n");
 
-    // Si la transcripción contiene "capturar foto", se invoca la función para capturar y enviar la foto
-    if (response.indexOf("capturar foto") >= 0) {
-      ets_printf("Transcripción indica 'capturar foto'. Iniciando captura y envío de foto...\n");
-      if (capture_and_save_photo(sd, img_file_name)) {
-        uploadPhoto(img_file_name);
+      // Si la transcripción contiene "capturar foto", se invoca la función para capturar y enviar la foto
+      if (response.indexOf("capturar foto") >= 0) {
+          ets_printf("Transcripción indica 'capturar foto'. Iniciando captura y envío de foto...\n");
+          if (capture_and_save_photo(sd, img_file_name)) {
+              uploadPhoto(img_file_name);
+          } else {
+              ets_printf("Error al capturar o guardar la foto.\n");
+          }
       } else {
-        ets_printf("Error al capturar o guardar la foto.\n");
+          // Iniciar el proceso de generación de audio en el servidor
+          ets_printf("Preparando generación de audio en el servidor...\n");
+          
+          // Llamada inicial para comenzar la generación de audio
+          HTTPClient audioInitClient;
+          audioInitClient.begin(SERVER_URL_D); // Endpoint para iniciar generación de audio
+          int audioInitCode = audioInitClient.GET();
+          audioInitClient.end();
+          
+          if (audioInitCode == 200 || audioInitCode == 202) {
+              // Esperar y descargar el audio generado
+              ets_printf("Proceso de generación de audio iniciado. Esperando descarga...\n");
+              waitAndDownloadAudio("/downloaded_audio.wav");
+          } else {
+              ets_printf("Error al iniciar la generación de audio. Código: %d\n", audioInitCode);
+          }
       }
-    } else {
-      // Si no es "capturar foto", esperar y descargar el audio generado por el servidor
-      ets_printf("Esperando audio generado por el servidor...\n");
-      waitAndDownloadAudio("/downloaded_audio.wav");
-    }
   } else {
-    ets_printf("Error en la solicitud HTTP\n");
+      ets_printf("Error en la solicitud HTTP\n");
   }
 
   file.close();

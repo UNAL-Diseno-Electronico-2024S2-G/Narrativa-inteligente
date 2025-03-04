@@ -10,10 +10,10 @@ import requests
 from api.api_utils import api
 
 app = Flask(__name__)
-file_name = 'output.wav'
+file_name = '/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/server/output.wav'
 file_path = os.path.abspath(file_name)
 
-UPLOAD_FOLDER = "/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/api/images"
+UPLOAD_FOLDER = "/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/server"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # Asegura que la carpeta exista
 
 # Variable para rastrear si la generación de audio está en progreso
