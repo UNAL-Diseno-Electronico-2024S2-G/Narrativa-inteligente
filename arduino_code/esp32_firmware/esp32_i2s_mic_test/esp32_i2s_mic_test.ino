@@ -13,7 +13,7 @@
 // define the number of bytes you want to access
 #define EEPROM_SIZE 1
 
-#define SERVER_URL "http://192.168.1.11:8888/uploadAudio"
+#define SERVER_URL "http://10.203.186.190:8888/uploadAudio"
 
 void setup() {
   Serial.begin(115200);

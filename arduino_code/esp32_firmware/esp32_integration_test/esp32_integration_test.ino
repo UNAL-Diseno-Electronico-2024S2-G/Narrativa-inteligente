@@ -14,9 +14,9 @@
 #include <HTTPClient.h>
 #include <FastLED.h>
 
-#define SERVER_URL "http://10.203.140.73:8888/uploadAudio"
-#define SERVER_URL_D "http://10.203.140.73:8888/downloadAudio"
-#define PHOTO_SERVER_URL "http://10.203.140.73:8888/uploadPhoto"
+#define SERVER_URL "http://10.203.186.190:8888/uploadAudio"
+#define SERVER_URL_D "http://10.203.186.190:8888/downloadAudio"
+#define PHOTO_SERVER_URL "http://10.203.186.190:8888/uploadPhoto"
 
 const char img_file_name[] = "/image.jpg";
 const char audio_file_name[] = "/test.wav";
@@ -45,8 +45,8 @@ void setup() {
 
   // Inicializar botones
   pinMode(1, INPUT_PULLUP); // Reproducir audio
-  pinMode(42, INPUT_PULLUP); // Tomar foto
-  pinMode(43, INPUT_PULLUP);
+  // pinMode(44, INPUT_PULLUP); // Tomar foto
+  // pinMode(43, INPUT_PULLUP);
 
   // Inicializar WiFi
   init_wifi();
@@ -95,13 +95,15 @@ void setup() {
 
 void loop() {
   // Aquí va el resto del código principal
-  if (digitalRead(1) == HIGH) {
-    record_push_audio_to_SD(sd, audio_file_name, 1, 12.0);
-    uploadFile(audio_file_name);
-    if (!play_audio_from_sd(sd, audio_file_name)) {  // Usar el puntero sd
-      ets_printf("Error al reproducir el archivo de audio.\n");
-    }
-  } else if (digitalRead(42) == HIGH) {
+  // if (digitalRead(1) == LOW) {
+  //   record_push_audio_to_SD(sd, audio_file_name, 1, 12.0);
+  //   uploadFile(audio_file_name);
+  //   if (!play_audio_from_sd(sd, audio_file_name)) {  // Usar el puntero sd
+  //     ets_printf("Error al reproducir el archivo de audio.\n");
+  //   }
+  // } 
+  // else 
+  if (digitalRead(1) == LOW) {
     // Lógica para tomar foto
     if (capture_and_save_photo(sd, img_file_name)) {
       uploadPhoto(img_file_name);
@@ -208,7 +210,7 @@ void uploadPhoto(const char *photoPath) {
 
 void waitAndDownloadAudio(const char* audioFilePath) {
     unsigned long startTime = millis();
-  const unsigned long timeout = 120000; // X minutes
+  const unsigned long timeout = 180000; // X minutes
   bool audioDownloaded = false;
 
   // First call /downloadAudio to start generation
@@ -222,14 +224,14 @@ void waitAndDownloadAudio(const char* audioFilePath) {
 
   // Then poll /checkAudio until file is ready
   while (millis() - startTime < timeout) {
-    if (WiFi.status() != WL_CONNECTED) {
-      ets_printf("Error: WiFi no conectado.\n");
-      return;
-    }
+    // if (WiFi.status() != WL_CONNECTED) {
+    //   ets_printf("Error: WiFi no conectado.\n");
+    //   return;
+    // }
 
     // Try to download from /checkAudio
     HTTPClient http;
-    http.begin("http://10.203.140.73:8888/checkAudio");
+    http.begin("http://10.203.186.190:8888/checkAudio");
     int httpResponseCode = http.GET();
 
     if (httpResponseCode == 200) {

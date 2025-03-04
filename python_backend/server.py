@@ -5,6 +5,7 @@ import subprocess
 import time
 from flask import Flask, request, jsonify, send_file, redirect, Response
 import requests
+import json
 
 # Importa la función api desde el archivo correspondiente
 from api.api_utils import api
@@ -12,11 +13,12 @@ from api.api_utils import api
 app = Flask(__name__)
 file_name = '/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/server/output.wav'
 file_path = os.path.abspath(file_name)
+generation_status_file = '/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/server/generation_status.json'
 
 UPLOAD_FOLDER = "/home/xhapa/Documents/PROGRAMMING/Projects/Narrativa-inteligente/python_backend/server"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # Asegura que la carpeta exista
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Variable para rastrear si la generación de audio está en progreso
+# Variables para rastrear la generación de audio
 is_generating_audio = False
 
 @app.route('/uploadAudio', methods=['POST'])
@@ -56,6 +58,10 @@ def download_audio():
         if is_generating_audio:
             return jsonify({"status": "processing", "message": "El audio se está generando. Por favor, inténtalo de nuevo más tarde."}), 202
 
+        # Limpiar archivo de estado anterior si existe
+        if os.path.exists(generation_status_file):
+            os.remove(generation_status_file)
+
         # Marca que la generación de audio ha comenzado
         is_generating_audio = True
 
@@ -65,7 +71,7 @@ def download_audio():
 
         return jsonify({"status": "started", "message": "La generación de audio ha comenzado. Por favor, inténtalo de nuevo en unos minutos."}), 202
     except Exception as e:
-        is_generating_audio = False  # Reinicia el estado en caso de error
+        is_generating_audio = False
         return str(e), 500
 
 @app.route('/checkAudio', methods=['GET'])
@@ -73,15 +79,65 @@ def check_audio():
     global is_generating_audio
 
     try:
-        # Verifica si el archivo de audio ya está listo
-        if os.path.exists(file_name):
-            is_generating_audio = False  # Reinicia el estado
-            return send_file(file_path, mimetype='audio/wav', as_attachment=True)
-        else:
-            return jsonify({"status": "processing", "message": "El audio aún se está generando."}), 202
-    except Exception as e:
-        return str(e), 500
+        # Log the current state of files for debugging
+        print(f"Checking audio: generation status file exists: {os.path.exists(generation_status_file)}")
+        print(f"Output audio file exists: {os.path.exists(file_path)}")
 
+        # Check if the output file exists and is non-empty
+        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+            is_generating_audio = False
+            return send_file(file_path, mimetype='audio/wav', as_attachment=True)
+
+        # Check status file
+        if os.path.exists(generation_status_file):
+            try:
+                with open(generation_status_file, 'r') as f:
+                    status_data = json.load(f)
+                    current_status = status_data.get('status', 'processing')
+                
+                print(f"Current status from file: {current_status}")
+
+                if current_status == 'completed':
+                    # If status is completed but file doesn't exist, this might indicate an issue
+                    is_generating_audio = False
+                    
+                    # Additional debugging
+                    print("Status is completed, but no audio file found!")
+                    return jsonify({
+                        "status": "error", 
+                        "message": "Audio generation completed but file is missing."
+                    }), 500
+                
+                elif current_status == 'failed':
+                    is_generating_audio = False
+                    return jsonify({
+                        "status": "error", 
+                        "message": "Error generando el audio."
+                    }), 500
+            except (json.JSONDecodeError, IOError) as json_error:
+                # Log any JSON parsing errors
+                print(f"Error reading status file: {json_error}")
+                return jsonify({
+                    "status": "error", 
+                    "message": "Error leyendo el estado de generación."
+                }), 500
+
+        # If no status file or processing not complete
+        return jsonify({
+            "status": "processing", 
+            "message": "El audio aún se está generando."
+        }), 202
+
+    except Exception as e:
+        # Log the full error for debugging
+        import traceback
+        traceback.print_exc()
+        
+        is_generating_audio = False
+        return jsonify({
+            "status": "error", 
+            "message": f"Error inesperado: {str(e)}"
+        }), 500
 
 def speech_to_text(file_name):
     # Inicializar el recognizer
